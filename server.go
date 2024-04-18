@@ -3,22 +3,60 @@ package main
 import (
 	"fmt"
 	"net"
+	"sync"
 )
 
 // Server server对象
 type Server struct {
+	//Server基本信息
 	ip   string
 	port int
+	//在线用户信息维护
+	OnlineMap map[string]*User
+	mapLock   sync.RWMutex
+	//消息管道
+	Message chan string
 }
 
 // NewServer 构造server对象
 func NewServer(ip string, port int) *Server {
-	server := &Server{ip: ip, port: port}
+	server := &Server{
+		ip:        ip,
+		port:      port,
+		OnlineMap: make(map[string]*User),
+		Message:   make(chan string),
+	}
 	return server
 }
 
+// ListenMessage 读取消息队列中的消息，并将其写入用户的信箱
+func (_this *Server) ListenMessage() {
+	for {
+		msg := <-_this.Message
+		_this.mapLock.RLock()
+		for _, cli := range _this.OnlineMap {
+			cli.C <- msg
+		}
+		_this.mapLock.RUnlock()
+	}
+}
+
+func (_this *Server) BroadCast(user *User, msg string) {
+	sendMsg := "[" + user.Address + "]" + user.Name + ":" + msg
+	_this.Message <- sendMsg
+}
+
 func (_this *Server) Handler(accept net.Conn) {
-	fmt.Println(accept, "链接建立成功")
+	user := NewUser(accept)
+
+	//加入到在线用户列表
+	_this.mapLock.Lock()
+	_this.OnlineMap[user.Address] = user
+	_this.mapLock.Unlock()
+	//广播消息
+	_this.BroadCast(user, "已上线")
+	//阻塞handler
+	//select {}
 }
 
 // Start 使用TCP监听指定的网络地址
@@ -36,6 +74,9 @@ func (_this *Server) Start() {
 		_ = listen.Close()
 	}(listen)
 
+	//start listen messages
+	go _this.ListenMessage()
+
 	//accept
 	for {
 		accept, err := listen.Accept()
@@ -44,6 +85,6 @@ func (_this *Server) Start() {
 			return
 		}
 		//do handler
-		_this.Handler(accept)
+		go _this.Handler(accept)
 	}
 }
