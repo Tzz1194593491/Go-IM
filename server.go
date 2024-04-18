@@ -47,15 +47,11 @@ func (_this *Server) BroadCast(user *User, msg string) {
 }
 
 func (_this *Server) Handler(accept net.Conn) {
-	user := NewUser(accept)
+	user := NewUser(accept, _this)
 
-	//加入到在线用户列表
-	_this.mapLock.Lock()
-	_this.OnlineMap[user.Address] = user
-	_this.mapLock.Unlock()
-	//广播消息
-	_this.BroadCast(user, "login")
-	fmt.Println(user.Name, "login")
+	//用户上线
+	user.Online()
+
 	//监听客户端写
 	go func() {
 		data := make([]byte, 4096)
@@ -66,12 +62,12 @@ func (_this *Server) Handler(accept net.Conn) {
 				return
 			}
 			if read == 0 {
-				_this.BroadCast(user, "logout")
+				user.Offline()
 				return
 			}
 			//提取消息
 			_msg := string(data[:len(data)-1])
-			_this.BroadCast(user, _msg)
+			user.DoMessage(_msg)
 		}
 	}()
 	//阻塞handler
