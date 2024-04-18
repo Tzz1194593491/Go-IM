@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 )
 
 // Server server对象
@@ -52,6 +53,8 @@ func (_this *Server) Handler(accept net.Conn) {
 	//用户上线
 	user.Online()
 
+	isLive := make(chan bool)
+
 	//监听客户端写
 	go func() {
 		data := make([]byte, 4096)
@@ -59,6 +62,7 @@ func (_this *Server) Handler(accept net.Conn) {
 			read, err := user.conn.Read(data)
 			if err != nil {
 				fmt.Println("occur error:", err)
+				user.Offline()
 				return
 			}
 			if read == 0 {
@@ -68,10 +72,21 @@ func (_this *Server) Handler(accept net.Conn) {
 			//提取消息
 			_msg := string(data[:read])
 			user.DoMessage(_msg)
+			//刷新计时器
+			isLive <- true
 		}
 	}()
 	//阻塞handler
-	select {}
+	for {
+		select {
+		case <-isLive:
+		case <-time.After(time.Duration(3) * time.Second):
+			user.SendMsg("你被踢了")
+			user.conn.Close()
+			close(user.C)
+			return
+		}
+	}
 }
 
 // Start 使用TCP监听指定的网络地址

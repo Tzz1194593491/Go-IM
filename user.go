@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 type User struct {
@@ -30,7 +31,7 @@ func NewUser(conn net.Conn, server *Server) *User {
 func (_this *User) Online() {
 	//加入到在线用户列表
 	_this.server.mapLock.Lock()
-	_this.server.OnlineMap[_this.Address] = _this
+	_this.server.OnlineMap[_this.Name] = _this
 	_this.server.mapLock.Unlock()
 	//广播消息
 	_this.server.BroadCast(_this, "login")
@@ -39,24 +40,25 @@ func (_this *User) Online() {
 func (_this *User) Offline() {
 	//加入到在线用户列表
 	_this.server.mapLock.Lock()
-	delete(_this.server.OnlineMap, _this.Address)
+	delete(_this.server.OnlineMap, _this.Name)
 	_this.server.mapLock.Unlock()
 	//广播消息
-	_this.server.BroadCast(_this, "login")
+	_this.server.BroadCast(_this, "logout")
 }
 
 func (_this User) SendMsg(msg string) {
-	_, write := _this.conn.Write([]byte(msg))
+	_, write := _this.conn.Write([]byte(msg + "\n"))
 	if write != nil {
-		fmt.Println("error occur", write)
+		fmt.Println("SendMsg error occur", write)
 		return
 	}
 }
 
 func (_this *User) DoMessage(msg string) {
-	fmt.Println(msg)
 	if msg == "who" {
 		_this.who()
+	} else if len(msg) > 7 && msg[:7] == "rename|" {
+		_this.rename(strings.Split(msg, "|")[1])
 	} else {
 		//广播消息
 		_this.server.BroadCast(_this, msg)
@@ -64,26 +66,12 @@ func (_this *User) DoMessage(msg string) {
 }
 
 func (_this *User) ListenMessage() {
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(_this.conn)
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(_this.conn)
-
 	for {
 		msg := <-_this.C
-		_, err := _this.conn.Write([]byte(msg + "\n"))
-		if err != nil {
-			fmt.Println(_this.Name, "has", "error", err)
+		if msg == "" {
 			return
 		}
+		_this.SendMsg(msg)
 	}
 }
 
@@ -91,9 +79,19 @@ func (_this *User) who() {
 	msg := ""
 	_this.server.mapLock.RLock()
 	for name, _ := range _this.server.OnlineMap {
-		msg += name + " online\n"
+		msg += name + " online"
 	}
 	_this.server.mapLock.RUnlock()
 	fmt.Println(msg)
 	_this.SendMsg(msg)
+}
+
+func (_this *User) rename(newName string) {
+	user := _this.server.OnlineMap[_this.Name]
+	_this.server.mapLock.Lock()
+	delete(_this.server.OnlineMap, user.Name)
+	_this.server.OnlineMap[newName] = user
+	_this.Name = newName
+	_this.server.mapLock.Unlock()
+	_this.SendMsg("you have used new name")
 }
