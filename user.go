@@ -45,9 +45,22 @@ func (_this *User) Offline() {
 	_this.server.BroadCast(_this, "login")
 }
 
+func (_this User) SendMsg(msg string) {
+	_, write := _this.conn.Write([]byte(msg))
+	if write != nil {
+		fmt.Println("error occur", write)
+		return
+	}
+}
+
 func (_this *User) DoMessage(msg string) {
-	//广播消息
-	_this.server.BroadCast(_this, msg)
+	fmt.Println(msg)
+	if msg == "who" {
+		_this.who()
+	} else {
+		//广播消息
+		_this.server.BroadCast(_this, msg)
+	}
 }
 
 func (_this *User) ListenMessage() {
@@ -57,7 +70,6 @@ func (_this *User) ListenMessage() {
 			fmt.Println(err)
 		}
 	}(_this.conn)
-
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
@@ -73,4 +85,15 @@ func (_this *User) ListenMessage() {
 			return
 		}
 	}
+}
+
+func (_this *User) who() {
+	msg := ""
+	_this.server.mapLock.RLock()
+	for name, _ := range _this.server.OnlineMap {
+		msg += name + " online\n"
+	}
+	_this.server.mapLock.RUnlock()
+	fmt.Println(msg)
+	_this.SendMsg(msg)
 }

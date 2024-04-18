@@ -66,7 +66,7 @@ func (_this *Server) Handler(accept net.Conn) {
 				return
 			}
 			//提取消息
-			_msg := string(data[:len(data)-1])
+			_msg := string(data[:read])
 			user.DoMessage(_msg)
 		}
 	}()
