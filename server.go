@@ -54,9 +54,28 @@ func (_this *Server) Handler(accept net.Conn) {
 	_this.OnlineMap[user.Address] = user
 	_this.mapLock.Unlock()
 	//广播消息
-	_this.BroadCast(user, "已上线")
+	_this.BroadCast(user, "login")
+	fmt.Println(user.Name, "login")
+	//监听客户端写
+	go func() {
+		data := make([]byte, 4096)
+		for {
+			read, err := user.conn.Read(data)
+			if err != nil {
+				fmt.Println("occur error:", err)
+				return
+			}
+			if read == 0 {
+				_this.BroadCast(user, "logout")
+				return
+			}
+			//提取消息
+			_msg := string(data[:len(data)-1])
+			_this.BroadCast(user, _msg)
+		}
+	}()
 	//阻塞handler
-	//select {}
+	select {}
 }
 
 // Start 使用TCP监听指定的网络地址
